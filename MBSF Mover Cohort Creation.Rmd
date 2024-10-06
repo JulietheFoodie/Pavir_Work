@@ -1,0 +1,859 @@
+---
+title: "Movers Calculation"
+author: "Julie Norman"
+purpose: "Create 5% sample cohort of MBSF patients including variables on county occupancy, hospitalization and demographic details"
+date: "2024-07-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Libraries
+
+```{r include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(data.table)
+library(haven)
+library(mosaic)
+library(microbenchmark) # calc runtime
+
+```
+
+
+```{r}
+ cohraw_df <- fread('/project/Burke_PAC_MA/Analysis/Norman/Raw Data for R/SongCohort0618_0913.csv')
+
+# cohraw_exp <- cohraw_df %>%
+#   select(BENE_ID, MEDPAR_ID, PRVDR_NUM, RFRNC_YR, ADMSNDT, DSCHRGDT, DEATHDT, RTI_RACE_CD, BENE_DOB, CCI_TOT_GRP, FIPS_hosp)
+
+names(cohraw_df) <-tolower(names(cohraw_df))
+
+write_rds(cohraw_df, '/project/Burke_PAC_MA/Analysis/Norman/Raw Data for R/SongCohortSel0618.rds')
+```
+
+```{r}
+
+```
+
+## Questions
+
+how to handle when years are limited: 
+	
+llllll00A0JAA0j only has 2019 Jan-sept
+
+no multiple hospitalizations per quarter, intuitive sense?
+
+Review final two graphics
+
+what prop have at least 1 hosp in the year
+
+
+
+# 5% sample quarterly movers
+
+```{r}
+mbsftst <- mbsfsamp5_df %>% 
+  select(bene_id, rfrnc_yr, rfrnc_qrt) %>% 
+  group_by(bene_id) %>% 
+  summarise(benecnt = n())
+  
+```
+
+
+```{r}
+set.seed(8675309)
+
+mbsf_df <- fread("/project/Burke_PAC_MA/Analysis/Norman/Raw Data for R/RawMbsfDem1519B.csv")
+
+names(mbsf_df) <-tolower(names(mbsf_df))
+
+patsamp5_df <- mbsf_df %>%
+  select(bene_id) %>%
+  distinct() %>%
+  sample_frac(.05)
+
+mbsfsamp5_df <- mbsf_df %>% 
+  inner_join(patsamp5_df)
+
+write_rds(mbsfsamp5_df, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MBSFraw05p091824.rds")
+
+# patsamp1_df <-  mbsfraw1_df %>% 
+#   select(BENE_ID, BENE_DOB, RTI_RACE_CD) %>% 
+#   distinct() 
+# 
+# names(patsamp1_df) <-tolower(names(patsamp1_df))
+
+#cohraw_df <- read_rds('/project/Burke_PAC_MA/Analysis/Norman/Raw Data for R/SongCohortSel0618.rds')
+
+
+```
+
+
+
+### Calc Quarterly Movers
+
+```{r}
+mbsfsamp5_df <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MBSFraw05p091824.rds")
+
+ind_repeat_pattern <- function(input_string) {
+  # Function to check if the input string is made of repeating 5-character patterns
+  check_repeating_pattern <- function(x) {
+    n <- nchar(x)
+    
+    # Ensure the string length is not zero and is a multiple of 5
+    if (n == 0 || n %% 5 != 0) {
+      return("No")
+    }
+    
+    # Extract the repeating unitfip_combfip_combfip_comb
+    pattern_length <- 5
+    pattern <- substr(x, 1, pattern_length)
+    
+    # Create a repeated pattern of length equal to input_string
+    repeated_pattern <- paste(rep(pattern, n / pattern_length), collapse = "")
+    
+    # Check if the repeated pattern matches the entire string
+    if (repeated_pattern == x) {
+      return("Yes")
+    }
+    
+    return("No")
+  }
+  # Apply the function to each element in the input vector
+  sapply(input_string, check_repeating_pattern)
+}
+  
+  
+# divide movers and non movers
+mbsf5_df2 <- mbsfsamp5_df %>%
+  arrange(bene_id, rfrnc_yr) %>%
+  #slice_head(n = 10000) %>% 
+  mutate(
+  fip_q1 = case_when(
+    is.na(state_cnty_fips_cd_01) == FALSE ~ 
+      state_cnty_fips_cd_01,
+    is.na(state_cnty_fips_cd_01) == TRUE &
+      is.na(state_cnty_fips_cd_02) == FALSE ~
+      state_cnty_fips_cd_02,
+    is.na(state_cnty_fips_cd_01) == TRUE &
+      is.na(state_cnty_fips_cd_02) == TRUE &
+      is.na(state_cnty_fips_cd_03) == FALSE ~
+      state_cnty_fips_cd_03,
+    is.na(state_cnty_fips_cd_01) == TRUE &
+      is.na(state_cnty_fips_cd_02) == TRUE &
+      is.na(state_cnty_fips_cd_03) == TRUE ~ NA),
+   fip_q2 = case_when(
+    is.na(state_cnty_fips_cd_04) == FALSE ~ 
+      state_cnty_fips_cd_04,
+    is.na(state_cnty_fips_cd_04) == TRUE &
+      is.na(state_cnty_fips_cd_05) == FALSE ~
+      state_cnty_fips_cd_05,
+    is.na(state_cnty_fips_cd_04) == TRUE &
+      is.na(state_cnty_fips_cd_05) == TRUE &
+      is.na(state_cnty_fips_cd_06) == FALSE ~
+      state_cnty_fips_cd_06,
+    is.na(state_cnty_fips_cd_04) == TRUE &
+      is.na(state_cnty_fips_cd_05) == TRUE &
+      is.na(state_cnty_fips_cd_06) == TRUE ~ NA),
+  fip_q3 = case_when(
+    is.na(state_cnty_fips_cd_07) == FALSE ~ 
+      state_cnty_fips_cd_07,
+    is.na(state_cnty_fips_cd_07) == TRUE &
+      is.na(state_cnty_fips_cd_08) == FALSE ~
+      state_cnty_fips_cd_08,
+    is.na(state_cnty_fips_cd_07) == TRUE &
+      is.na(state_cnty_fips_cd_08) == TRUE &
+      is.na(state_cnty_fips_cd_09) == FALSE ~
+      state_cnty_fips_cd_09,
+    is.na(state_cnty_fips_cd_07) == TRUE &
+      is.na(state_cnty_fips_cd_08) == TRUE &
+      is.na(state_cnty_fips_cd_09) == TRUE ~ NA),
+   fip_q4 = case_when(
+    is.na(state_cnty_fips_cd_10) == FALSE ~ 
+      state_cnty_fips_cd_10,
+    is.na(state_cnty_fips_cd_10) == TRUE &
+      is.na(state_cnty_fips_cd_11) == FALSE ~
+      state_cnty_fips_cd_11,
+    is.na(state_cnty_fips_cd_10) == TRUE &
+      is.na(state_cnty_fips_cd_11) == TRUE &
+      is.na(state_cnty_fips_cd_12) == FALSE ~
+      state_cnty_fips_cd_12,
+    is.na(state_cnty_fips_cd_10) == TRUE &
+      is.na(state_cnty_fips_cd_11) == TRUE &
+      is.na(state_cnty_fips_cd_12) == TRUE ~ NA)
+    ) %>% 
+  select(bene_id, rfrnc_yr, starts_with("fip_q")) %>% 
+   mutate(
+    missfip_all = ifelse(is.na(fip_q1) == TRUE &
+                           is.na(fip_q2) == TRUE &
+                           is.na(fip_q3) == TRUE &
+                           is.na(fip_q4) == TRUE, 1, 0),
+    fip_comb = paste0( # 5 digit fip to maintain pattern of 5
+      sprintf("%05d", fip_q1),   
+      sprintf("%05d", fip_q2),
+      sprintf("%05d", fip_q3),
+      sprintf("%05d", fip_q4)
+    ) %>% gsub("NA| ", "", .) # Adjusted to handle NA values at the start
+  ) %>%
+  filter(missfip_all == 0) %>%  # pat with all missing rows, new n = 3689915
+  mutate(nonmove_yr = 
+           ind_repeat_pattern(fip_comb),
+         fip_frst =  substr(fip_comb, 1, 5)) %>% 
+  group_by(bene_id) %>%
+  mutate(frst_fip_cnt =
+           n_distinct(fip_frst)) %>% 
+  mutate(mover_ind = ifelse(any(nonmove_yr == "No") | any(frst_fip_cnt > 1), 1, 0)) %>% 
+  ungroup() # mover_ind has no NA
+# 3689915 bene
+
+write_rds(mbsf5_df2, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/mbsf05p092724.rds")
+  
+# non-mover should have 3305087 unique bene_id, shouldn't/doesn't change
+non_move5_df <- mbsf5_df2 %>% 
+  filter(mover_ind == 0) %>% 
+  mutate(move_yr = NA,
+         move_qrt = NA,
+         num_moves = 0,
+         row_fip1 = apply(
+           select(., starts_with("fip_q")), 1, min, na.rm = TRUE),
+         row_fip2 = apply(
+           select(., starts_with("fip_q")), 1, max, na.rm = TRUE)) %>% 
+  group_by(bene_id) %>% 
+  mutate(fip_chk = row_fip1 == row_fip2, # all true
+         fip_strt = min(row_fip1, na.rm = TRUE),
+         fip_end = max(row_fip1, na.rm = TRUE)) %>% # check for diff 
+  mutate(diff_fip = ifelse(fip_strt == fip_end, FALSE, TRUE) ) %>% 
+  # all false
+  select(bene_id, mover_ind, num_moves, move_yr, move_qrt, fip_strt, fip_end) %>% 
+  distinct()
+# nrow = 3305087
+# unique bene = 3305087
+# mover_ind = num_moves = 0 for all
+# no missing for fip_ vars
+
+## MOVERS ##
+# All mover count: 384828 ben_id
+move5_df <- mbsf5_df2 %>%
+  filter(mover_ind == 1 ) %>% #384828 bene
+  select(bene_id, rfrnc_yr, starts_with("fip_q")) %>%
+  arrange(bene_id, rfrnc_yr) %>%
+  group_by(bene_id) %>%
+  pivot_longer(cols = starts_with("fip_q"),
+               names_to = "qrt_col", values_to = "fip") %>%
+  filter(is.na(fip) == FALSE) %>%   #384828 bene
+  mutate(fips_change =  fip != lag(fip) ) %>%
+  group_by(bene_id) %>%
+  mutate(fip_strt = first(fip, na_rm = TRUE),
+         fip_end = last(fip, na_rm = TRUE),
+         move_cnt_all = sum(fips_change, na.rm = TRUE)) %>% 
+  filter(move_cnt_all == 1 & fips_change == TRUE) %>% 
+          # multiple moves removed, 302483 bene left
+  mutate(
+    move_yr = (rfrnc_yr),
+    move_qrt = as.numeric(str_sub(qrt_col, -1)),
+    mover_ind = 1,
+    num_moves = 1,
+  ) %>%
+  ungroup() %>%
+  select(bene_id, mover_ind, num_moves, move_yr, move_qrt, fip_strt, fip_end) %>% 
+  distinct()
+# nrow = n_distinct(bene) = 302483  
+# Quarters Distibution
+#     1     2     3     4 
+# 63034 74339 75182 89928
+  
+# 82345 patients removed as multiple movers, 2.23% of sampled patients
+
+mover_exp5 <- rbind(non_move5_df, move5_df) %>% 
+  arrange(bene_id, move_yr) %>% 
+  mutate(duplicate_flag = duplicated(bene_id) | duplicated(bene_id, fromLast = TRUE)) # no duplicates
+
+# check bene categorization
+
+write_rds(mover_exp5, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MovingAllQrt05p092724.rds")
+
+
+
+
+```
+
+#### Checks
+```{r}
+# initial 3690462, sub missing 3689915, sub multiple, 3607570
+
+n_distinct(mover_exp5$bene_id) #3607570
+nrow(mover_exp5) #3607570
+
+table(mover_exp5$mover_ind)
+#       0       1 
+# 3305087    302483   
+# should match n from above
+
+table(is.na(mover_exp5$mover_ind)) # all false
+
+colSums(is.na(mover_exp5))
+# bene_id mover_ind num_moves   move_yr  move_qrt  fip_strt   fip_end 
+#         0         0         0   3305087   3305087         0         0 
+
+```
+#### final bene count
+```{r}
+mover_exp5 <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MovingAllQrt05p092724.rds")
+
+# bene to keep
+sampbene5_df <- mover_exp5 %>% 
+  select(bene_id) %>% 
+  distinct()
+```
+
+
+### time base
+
+```{r}
+mbsf5_df2 <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/mbsf05p092724.rds")
+
+patKeep_df <- mbsf5_df2 %>% 
+  inner_join(sampbene5_df) %>% # 3607570 bene
+  select(bene_id, rfrnc_yr, contains("fip_q")) %>% 
+  group_by(bene_id) %>%
+  pivot_longer(cols = starts_with("fip_q"),
+               names_to = "qrt_col", values_to = "fip") %>% 
+  # nrow = 61398016
+  filter(is.na(fip) == FALSE) %>% # 2319968 dropped
+  mutate( rfrnc_qrt = as.numeric(str_sub(qrt_col, -1))) %>% 
+  select(bene_id, rfrnc_yr, rfrnc_qrt)
+
+
+```
+
+
+### Calc MA/FFS Coverage
+
+"Coverage Status by Month, F=FFS, M=MA, X=Neither, 9=Missing"
+
+
+if hmo_in[i]="0" and buy_in[i]="00" then hmo_out[i]="X"; 
+			else if hmo_in[i] in ("0", "4") then hmo_out[i]="F";
+			else if hmo_in[i] in ("1", "C") then hmo_out[i]="M";
+	end; 
+
+
+```{r}
+mbsfsamp5_df <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MBSFraw05p091824.rds")
+
+mbsfcov_df <- mbsfsamp5_df %>% 
+  inner_join(sampbene5_df)
+
+# Loop over suffixes 01 to 12 
+for (i in 1:12) {
+  suffix <- sprintf("%02d", i)  # Generate "01" to "12"
+  
+  # column names
+  hmoind_col <- paste0("hmoind", suffix)
+  buyin_col <- paste0("buyin", suffix)
+  cov_col <- paste0("cov_", suffix)
+  
+  # Create variable
+  mbsfcov_df <- mbsfcov_df %>%
+    mutate(!!cov_col := case_when(
+      !!sym(hmoind_col) == "0" & !!sym(buyin_col) == "00" ~ "X",
+      (!!sym(hmoind_col) == "0" & !!sym(buyin_col) != "00") | !!sym(hmoind_col) == "4" ~ "F",
+      !!sym(hmoind_col) == "1" | !!sym(hmoind_col) == "C" ~ "M",
+      TRUE ~ "9"
+    ))
+}
+
+
+
+```
+
+
+
+```{r}
+mbsfcov_df2 <- mbsfcov_df %>% 
+  select(-starts_with("state")) %>% 
+  mutate(cov_q1 = paste0(cov_01, cov_02, cov_03),
+         cov_q2 = paste0(cov_04, cov_05, cov_06),
+         cov_q3 = paste0(cov_07, cov_08, cov_09),
+         cov_q4 = paste0(cov_10, cov_11, cov_12)) %>% 
+  select(bene_id, rfrnc_yr, contains("cov_q")) %>% 
+  pivot_longer(cols = starts_with("cov_q"),
+               names_to = "rfrnc_qrt_col", 
+               values_to = "coverage") %>% # no NA cov value
+  mutate(rfrnc_qrt = as.numeric(gsub("cov_q", "", rfrnc_qrt_col)),
+         FFS_ind = ifelse(grepl("F", coverage), 1, 0),
+         MA_ind = ifelse(grepl("M", coverage), 1, 0),
+         miss_ind =ifelse(grepl("X", coverage), 1, 0),) %>% 
+  mutate(FM_ind = ifelse(FFS_ind == MA_ind, 1, 0)) %>% 
+  select(-coverage, -rfrnc_qrt_col)
+# uniq bene: 3689915, match missing filter
+
+```
+
+quarterly coverage
+     FFF      FFM      FMF      FMM      MFF 
+40094105   146542     4023   155064   106583 
+     MFM      MMF      MMM 
+    5005   100262 19214144 
+    
+NA
+  bene_id  rfrnc_yr rfrnc_qrt   FFS_ind    MA_ind 
+        0         0         0         0         0 
+ miss_ind    FM_ind 
+        0         0 
+
+```{r}
+
+
+mbsfcovFilt_df <- patKeep_df %>% 
+  left_join(mbsfcov_df2)
+
+write_rds(mbsfcovFilt_df, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MBSFcov05p092824.rds")
+```
+#### Checks
+
+```{r}
+colSums(is.na(mbsfcovFilt_df))
+ #  bene_id  rfrnc_yr rfrnc_qrt   FFS_ind    MA_ind 
+ #        0         0         0         0         0 
+ # miss_ind    FM_ind 
+ #        0         0
+
+n_distinct(mbsfcovFilt_df$bene_id)
+# uniq bene:  3607570, correct
+
+```
+
+
+
+### Calc Patient Demograpics
+
+Race
+
+```{r}
+mbsfsamp5_df <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MBSFraw05p091824.rds")
+
+  
+
+patRace_df <- mbsfsamp5_df %>% 
+  inner_join(sampbene5_df) %>% 
+  select(bene_id, rti_race_cd) %>% 
+ filter(!is.na(rti_race_cd)) %>%  # Remove NA values in colb
+  group_by(bene_id) %>% 
+  mutate( mode_count = sum(table(rti_race_cd) == max(table(rti_race_cd))),
+          race = rti_race_cd[which.max(table(rti_race_cd))]) %>% 
+  mutate(race_rti = ifelse(mode_count > 1, NA, race)) %>% 
+  select(bene_id, race_rti) %>% 
+  distinct()
+```
+
+
+Other
+
+```{r}
+
+patAll_df <- mbsfsamp5_df %>% 
+  inner_join(sampbene5_df) %>% 
+  select(bene_id, bene_dob, sex,death_dt) %>% 
+  distinct() %>% 
+  mutate(death_dt =  ifelse(death_dt == "", NA, death_dt)) %>% 
+  group_by(bene_id) %>% 
+  mutate(dob_ck = n_distinct(bene_dob), # count unique entries per patient
+         sex_ck = n_distinct(sex),
+         dth_ck = n_distinct(death_dt)) %>% 
+  mutate(bene_dob = ifelse(dob_ck > 1, NA, bene_dob), # NA for differing entries
+         sex = ifelse(sex_ck > 1, NA, sex),
+         dth_ck = ifelse(dth_ck > 1, NA, death_dt)) %>% 
+  select(bene_id, bene_dob, sex, death_dt) %>% 
+  summarize(bene_dob = first(bene_dob, na_rm = TRUE), # extract unique entry
+            sex = first(sex, na_rm = TRUE),
+            death_dt = first(death_dt, na_rm = TRUE)) %>% 
+  distinct() %>% 
+  left_join(patRace_df)
+#3607570
+
+nrow(patAll_df)
+#3607570
+
+table(is.na(patAll_df$death_dt))/3607570
+#      FALSE       TRUE 
+# 0.03206064 0.96793936 
+
+table(patAll_df$sex)/3607570
+
+#         1         2 
+# 0.4609757 0.5389575 
+
+colSums(is.na(patAll_df))
+ # bene_id bene_dob      sex death_dt race_rti 
+ #       0     1408      241  3491909     1564
+
+1564/3607570
+# less than 1% race missing
+  
+```
+
+
+```{r}
+patAnn_df <- mbsfsamp5_df %>% 
+  inner_join(sampbene5_df) %>% 
+  select(bene_id, rfrnc_yr, esrd_ind) %>% 
+  distinct() # no missing
+
+patdemsamp5_df <- patAnn_df %>% 
+  left_join(patAll_df)
+# 3607570 bene unique
+
+write_rds(patdemsamp5_df, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/patDemVar05p100224.rds")
+
+```
+#### checks
+
+```{r}
+tst <- patAnn_df %>% 
+  mutate(uniq_id = paste0(bene_id, as.character(rfrnc_yr))) %>% 
+  mutate(dup_flag = duplicated(uniq_id) | duplicated(uniq_id, fromLast = TRUE))
+
+table(tst$dup_flag)
+# no duplicates
+
+#stats
+
+n_distinct(patdemsamp5_df$bene_id) #3607570
+
+table(patdemsamp5_df$rfrnc_yr)
+
+#    2015    2016    2017    2018    2019 
+# 2841018 2913954 2991117 3067026 3143317 
+# 0.18995 0.19483 0.19999 0.20506 0.21016
+# no missing
+
+table(patdemsamp5_df$sex)
+
+#       1       2   NA
+# 6835722 8119629 1081 
+
+table(patdemsamp5_df$rti_race)
+  #     0        1        2        3        4        5        6     NA
+  # 230516 11094526  1556068   124287   488226  1356882    64641  41286 
+
+table(patdemsamp5_df$esrd_ind)
+
+#        0        Y 
+# 14813786   142646 
+# no NA
+
+table(is.na(patdemsamp5_df$death_dt))
+
+  #  FALSE     TRUE 
+  # 115669 14840763 
+
+```
+
+
+### Create dataset
+
+```{r}
+patdemsamp5_df <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/patDemVar05p100224.rds")
+
+mover_exp5 <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MovingAllQrt05p092724.rds")
+
+mbsfcovFilt_df <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MBSFcov05p092824.rds")
+
+
+
+cohraw_df <- read_rds('/project/Burke_PAC_MA/Analysis/Norman/Raw Data for R/SongCohortSel0618.rds')
+
+
+
+hosp_jn <- cohraw_df %>%
+  mutate(adm_date = dmy(admsndt), 
+         hosp = 1) %>% 
+   mutate(
+    rfrnc_qrt = case_when(
+      month(adm_date) %in% 1:3  ~ 1,
+      month(adm_date) %in% 4:6  ~ 2,
+      month(adm_date) %in% 7:9  ~ 3,
+      month(adm_date) %in% 10:12 ~ 4),
+    pac_ind = snf_flag ) %>% 
+  select(bene_id, rfrnc_yr, rfrnc_qrt, hosp, fips_hosp, pac_ind) %>% 
+  distinct()
+
+table(hosp_jn$rfrnc_yr)
+
+#    2015    2016    2017    2018    2019 
+# 6355581 6075581 6250415 6202194 6191921 
+
+table(hosp_jn$rfrnc_qrt)
+
+#       1       2       3       4 
+# 8504111 7607940 7371172 7592469 
+```
+
+```{r}
+ddth_rm <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/dthChkRmv092924.rds")
+
+moverFinal_df <- mbsfcovFilt_df %>% # patient and coverage
+  left_join(mover_exp5) %>% #mover info: join_by(bene_id)
+  left_join(hosp_jn) %>% #hospitalization: join_by(bene_id, rfrnc_yr, rfrnc_qrt)
+  left_join(patdemsamp5_df) %>% #patient demographics: join_by(bene_id, rfrnc_yr)
+   anti_join(ddth_rm) # remove undead patient entries
+
+  
+ 
+
+moverFinal_df2 <- moverFinal_df %>%
+  mutate(hosp_ind = ifelse(is.na(hosp) == TRUE, 0, 1 ),
+         age = rfrnc_yr - year(dmy(bene_dob)),
+         occ_fip = case_when(mover_ind == 0 ~ fip_strt,
+                               mover_ind == 1 &
+                                 (rfrnc_yr < move_yr |
+                                    (rfrnc_yr == move_yr &
+                                       rfrnc_qrt < move_qrt)) ~ fip_strt,
+                               TRUE ~ fip_end),
+         reference_date = case_when(
+           rfrnc_qrt == 1 ~
+             as.Date(paste( rfrnc_yr, "-01-01", sep = "")),
+           rfrnc_qrt == 2 ~
+             as.Date(paste(rfrnc_yr, "-04-01", sep = "")),
+           rfrnc_qrt == 3 ~
+             as.Date(paste(rfrnc_yr, "-07-01", sep = "")),
+           rfrnc_qrt == 4 ~
+             as.Date(paste(rfrnc_yr, "-10-01", sep = ""))),
+         death_dt = dmy(death_dt)) %>%
+  filter(death_dt >=  reference_date) %>%
+  select(-hosp)
+
+write_rds(moverFinal_df2, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MoverCohPanel05p100224.rds")
+```
+
+#### Check
+
+check var creation
+
+```{r}
+n_distinct(moverFinal_df2$bene_id)
+#3607570
+
+
+
+
+fav_stats(moverFinal_df2$age)
+# min Q1 med Q3 max     mean       sd        n     missing
+# 0   67  71 78 151  71.65817  11.32092  57475801   25795
+ 
+moverFinal_df2 %>% filter(age < 60) %>% nrow()  
+# 5742167, 0.099861 of dataset
+
+table(moverFinal_df2$hosp_ind)
+#        0        1 
+# 55980203  1521413 
+```
+colSums(is.na(moverFinal_df2))
+
+       bene_id       rfrnc_yr      rfrnc_qrt        FFS_ind 
+             0              0              0              0 
+        MA_ind       miss_ind         FM_ind      mover_ind 
+             0              0              0              0 
+     num_moves        move_yr       move_qrt       fip_strt 
+             0       52122200       52122200              0 
+       fip_end duplicate_flag           hosp      fips_hosp 
+             0              0       55980183       56031888 
+       pac_ind       esrd_ind       bene_dob            sex 
+      55980183              0          25795           4130 
+   rti_race_cd       death_dt       hosp_ind            age 
+        149745       57220631              0          25795 
+       occ_fip reference_date    pat_cnt_fip   hosp_cnt_fip 
+             0              0              0              0 
+       util_rt 
+             0 
+
+Check Deceased
+
+```{r}
+d_df <- moverFinal_df %>% 
+  filter(is.na(bene_dob) == FALSE) %>% 
+  group_by(bene_dob) %>% 
+  filter(rfrnc_yr == max(rfrnc_yr, na.rm = TRUE) & 
+           rfrnc_qrt == max(rfrnc_qrt, na.rm = TRUE))
+
+#d_df$death_dt <- dmy(d_df$death_dt)
+
+ d_df$reference_date = case_when(
+       d_df$rfrnc_qrt == 1 ~ as.Date(paste( d_df$rfrnc_yr, "-01-01", sep = "")),
+       d_df$rfrnc_qrt == 2 ~ as.Date(paste(d_df$rfrnc_yr, "-04-01", sep = "")),
+       d_df$rfrnc_qrt == 3 ~ as.Date(paste(d_df$rfrnc_yr, "-07-01", sep = "")),
+       d_df$rfrnc_qrt == 4 ~ as.Date(paste(d_df$rfrnc_yr, "-10-01", sep = ""))
+    )
+ 
+d_df$dth_chk = ifelse(d_df$death_dt <  d_df$reference_date, "Before", "After")
+  # all should be after, 2 before
+
+table(d_df$dth_chk)
+
+
+# Gather rows with death mismatch
+bene_rmv <- d_df %>% filter(dth_chk == "Before") %>% select(bene_id)
+
+d_exp <- moverFinal_df 
+
+ d_exp$reference_date = case_when(
+       d_exp$rfrnc_qrt == 1 ~ as.Date(paste( d_exp$rfrnc_yr, "-01-01", sep = "")),
+       d_exp$rfrnc_qrt == 2 ~ as.Date(paste(d_exp$rfrnc_yr, "-04-01", sep = "")),
+       d_exp$rfrnc_qrt == 3 ~ as.Date(paste(d_exp$rfrnc_yr, "-07-01", sep = "")),
+       d_exp$rfrnc_qrt == 4 ~ as.Date(paste(d_exp$rfrnc_yr, "-10-01", sep = ""))
+    )
+ d_exp2 <- d_exp %>% 
+  inner_join(bene_rmv) %>% 
+   filter(death_dt <  reference_date) %>%  # two patients removed
+  select(bene_id, rfrnc_yr, rfrnc_qrt)
+
+write_rds(d_exp2, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/dthChkRmv092924.rds")
+
+# 2 patients died in 2015 and have entries afterward
+    
+```
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+mbsfAll_df <- moverFinal_df %>%
+  group_by(rfrnc_yr, bene_id) %>%
+  summarise(hosp_yr = max(hosp_ind)) %>% 
+  group_by(rfrnc_yr) %>% 
+  summarise(hosp_cnt = sum(hosp_yr, na.rm = TRUE), pat_cnt = n()) %>% 
+  mutate(hosp_perc = hosp_cnt/pat_cnt)
+
+
+mbsf65pl_df <- moverFinal_df %>%
+  filter(age > 65) %>% 
+    group_by(rfrnc_yr, bene_id) %>%
+  summarise(hosp_yr = max(hosp_ind)) %>% 
+  group_by(rfrnc_yr) %>%
+  summarise(hosp_cnt = sum(hosp_yr, na.rm = TRUE), pat_cnt = n()) %>% 
+  mutate(hosp_perc = hosp_cnt/pat_cnt)
+
+```
+
+
+
+
+
+# Full County Data
+
+### Prep raw mbsf
+
+```{r}
+mbsf_df <- fread("/project/Burke_PAC_MA/Analysis/Norman/Raw Data for R/RawMbsf1519.csv")
+
+names(mbsf_df) <-tolower(names(mbsf_df))
+```
+
+
+```{r}
+mbsf_exp <- mbsf_df %>% 
+  mutate(fip_q1 = case_when(is.na(state_cnty_fips_cd_01) == FALSE ~ state_cnty_fips_cd_01,
+                            is.na(state_cnty_fips_cd_01) == TRUE & 
+                              is.na(state_cnty_fips_cd_02) == FALSE ~ state_cnty_fips_cd_02,
+                            is.na(state_cnty_fips_cd_01) == TRUE & 
+                              is.na(state_cnty_fips_cd_02) == TRUE & 
+                              is.na(state_cnty_fips_cd_03) == FALSE ~ state_cnty_fips_cd_03, 
+                            is.na(state_cnty_fips_cd_01) == TRUE & 
+                              is.na(state_cnty_fips_cd_02) == TRUE & 
+                              is.na(state_cnty_fips_cd_03) == TRUE ~ NA),
+         fip_q2 = case_when(is.na(state_cnty_fips_cd_04) == FALSE ~ state_cnty_fips_cd_04,
+                            is.na(state_cnty_fips_cd_04) == TRUE & 
+                              is.na(state_cnty_fips_cd_05) == FALSE ~ state_cnty_fips_cd_05,
+                            is.na(state_cnty_fips_cd_04) == TRUE & 
+                              is.na(state_cnty_fips_cd_05) == TRUE & 
+                              is.na(state_cnty_fips_cd_06) == FALSE ~ state_cnty_fips_cd_06, 
+                            is.na(state_cnty_fips_cd_04) == TRUE & 
+                              is.na(state_cnty_fips_cd_05) == TRUE & 
+                              is.na(state_cnty_fips_cd_06) == TRUE ~ NA),
+         fip_q3 = case_when(is.na(state_cnty_fips_cd_07) == FALSE ~ state_cnty_fips_cd_07,
+                            is.na(state_cnty_fips_cd_07) == TRUE & 
+                              is.na(state_cnty_fips_cd_08) == FALSE ~ state_cnty_fips_cd_08,
+                            is.na(state_cnty_fips_cd_07) == TRUE & 
+                              is.na(state_cnty_fips_cd_08) == TRUE & 
+                              is.na(state_cnty_fips_cd_09) == FALSE ~ state_cnty_fips_cd_09, 
+                            is.na(state_cnty_fips_cd_07) == TRUE & 
+                              is.na(state_cnty_fips_cd_08) == TRUE & 
+                              is.na(state_cnty_fips_cd_09) == TRUE ~ NA),
+         fip_q4 = as.character(case_when(is.na(state_cnty_fips_cd_10) == FALSE ~ state_cnty_fips_cd_10,
+                            is.na(state_cnty_fips_cd_10) == TRUE & 
+                              is.na(state_cnty_fips_cd_11) == FALSE ~ state_cnty_fips_cd_11,
+                            is.na(state_cnty_fips_cd_10) == TRUE & 
+                              is.na(state_cnty_fips_cd_11) == TRUE & 
+                              is.na(state_cnty_fips_cd_12) == FALSE ~ state_cnty_fips_cd_12, 
+                            is.na(state_cnty_fips_cd_10) == TRUE & 
+                              is.na(state_cnty_fips_cd_11) == TRUE & 
+                              is.na(state_cnty_fips_cd_12) == TRUE ~ NA))) %>% 
+  select(bene_id, rfrnc_yr, bene_dob, rti_race_cd, contains("fip_q"))
+
+write_csv(mbsf_exp, "/project/Burke_PAC_MA/Analysis/Norman/SAS/MBSF2reshape.csv")
+
+```
+
+
+```{r}
+#created in SAS QuartAgg_hospCoh
+mbsfqrt_df <- fread("/project/Burke_PAC_MA/Analysis/Norman/Raw Data for R/mbsf_qrtCntyCnt.csv")
+names(mbsfqrt_df) <-tolower(names(mbsfqrt_df))
+
+
+cohraw_df <- fread("/project/Burke_PAC_MA/Analysis/Norman/Raw Data for R/SongCohort0618.csv")
+names(cohraw_df) <-tolower(names(cohraw_df))
+
+mover_expst5 <- readRDS("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MovingAllQrt05p140824.rds")
+
+```
+
+
+```{r}
+hospqt_df <- cohraw_df %>% 
+  mutate(rfrnc_qrt = quarter(dmy(admsndt)),
+         occ_fip = fips_yr) %>% 
+   group_by(occ_fip, rfrnc_yr, rfrnc_qrt) %>% 
+  summarise(hosp_cnt = n())
+
+
+Aggqt_df <- mbsfqrt_df %>%  
+  mutate(occ_fip = as.numeric(occ_fip)) %>% 
+  full_join(hospqt_df) %>% 
+  mutate(hosp_cnt = ifelse(is.na(hosp_cnt) == TRUE, 0, hosp_cnt),
+         util_rt = hosp_cnt /pat_uniq_count)
+
+Aggqt_df
+    
+write_rds(Aggqt_df, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/mbsfHospQtAgg090324.rds")
+
+mbsf_miss <- mbsfqrt_df %>% 
+  filter(is.na(occ_fip) == TRUE | occ_fip < 10)
+```
+
+### Combine with sample
+```{r}
+Aggqt_df  <- read_rds("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/mbsfHospQtAgg090324.rds")
+
+panel_df <- readRDS("/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/MoverCohPanel05p092824.rds")
+
+aggPanel_df <- panel_df %>% 
+  left_join(Aggqt_df) %>% 
+  rename(hosp_cnt_fip = hosp_cnt, 
+         pat_cnt_fip = pat_uniq_count) %>% 
+  arrange(bene_id, rfrnc_yr, rfrnc_qrt)
+  
+
+write_rds(aggPanel_df, "/project/Burke_PAC_MA/Analysis/Norman/Output/Rand Sample/PanelQtAgg092724.rds")
+
+```
+
+```{r}
+table(is.na(aggPanel_df$util_rt)) # no NA
+```
+
